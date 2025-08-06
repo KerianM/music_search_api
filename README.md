@@ -54,6 +54,15 @@ docker save -o [镜像id] music_search_api.tar
 docker load < music_search_api.tar
 docker tag [镜像id] music-search-api:latest
 ```
+### docker 构建容器
+```bash
+docker run -d --name music-search-api 
+  -p 3015:3015
+  -v /path/to/music:/app/music
+  -v /path/to/lyrics:/app/lyrics
+  -v /path/to/.env:/.env
+  music-search-api:latest
+```
 
 ## API文档
 
