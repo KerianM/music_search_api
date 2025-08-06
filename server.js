@@ -167,11 +167,12 @@ return new Promise((resolve, reject) => {
           }else{
             console.log(`已找到歌曲URL: ${musicurl}`);
           }
+          const safeUrl = new URL(SERVER_URL + '/lyrics/' + singer + ' - ' + songname + '.lrc').href;
           result = {
             title: songname,
             artist: singer,
             songUrl: musicurl,
-            lyricUrl: SERVER_URL + '/lyrics/' + singer + ' - ' + songname + '.lrc'
+            lyricUrl: safeUrl
           };
           // 返回数据
           resolve(result);
@@ -191,87 +192,95 @@ return new Promise((resolve, reject) => {
 });
 }
 
-// 网络音乐搜索 - 接口2 (https://api.yuafeng.cn/API/ly/mgmusic.php?msg=%E5%A4%9C%E6%9B%B2&n=1)
-async function searchMiguMusic(keyword) {
-return new Promise((resolve, reject) => {
+// 下载到本地，下载音乐和歌词至指定目录，并自动修改音乐的元数据
+const http = require('http');
+const nodeID3 = require('node-id3');
+
+async function downloadMusic(keyword) {
   const lyricsDir = process.env.LYRICS_DIRECTORY || './lyrics';
-  let result = null;
-  try {
-    console.log(`Searching Net2 Music for: ${keyword}`);
-    const https = require('https');
-    const params = new URLSearchParams({
-      msg: keyword,
-      n: 1,
-    });
-    const options = {
-      hostname: 'api.yuafeng.cn',
-      path: '/API/ly/mgmusic.php?' + params.toString(),
-      method: 'GET'
-    };
+  const musicDir = process.env.MUSIC_DIRECTORY || './music';
+  console.log(`Searching Net2 Music for: ${keyword}`);
+  const https = require('https');
+  const params = new URLSearchParams({ msg: keyword, n: 1 });
+  const options = {
+    hostname: 'api.yuafeng.cn',
+    path: '/API/ly/mgmusic.php?' + params.toString(),
+    method: 'GET'
+  };
+
+  return new Promise((resolve, reject) => {
     https.get(options, res => {
-      console.log(`statusCode: ${res.statusCode}`);
       let rawData = '';
-      res.on('data', d => {
-        rawData += d;
-      });
-      res.on('end', () => {
+      res.on('data', d => { rawData += d; });
+      res.on('end', async () => {
         try {
           const raw = JSON.parse(rawData);
-          if(!raw.data)
-          {
-            console.log('没有找到歌曲数据');
-            reject(new Error('接口 2 返回非 200'));
-          }
+          if (!raw.data) return reject(new Error('接口 2 返回非 200'));
           const songname = raw.data.song;
           const singer = raw.data.singer;
           const musicurl = raw.data.music;
           const lrctxt = raw.data.lyric;
 
-          // 如果没有歌曲但是有歌词，保存歌词文件至本地
-          // 检查歌词目录是否存在，不存在则创建
-          if(lrctxt && lrctxt != '' ) {
-              // 歌词文本，格式[歌手 - 歌曲名.lrc]
-              const filePath = lyricsDir + '/' + singer + ' - ' + songname + '.lrc';
-              if (!fs.existsSync(filePath))
-              {
-                fs.writeFileSync(filePath, lrctxt, 'utf8');
-                console.log(`歌词已保存为 ${filePath}`);
-              }else {
-                console.log(`${filePath} 已存在，跳过保存`);
-              }
-            }else {
-              console.log(`${songname} 歌词文件不存在`);
-              reject(new Error('接口 2 返回非 200'));
+          // 保存歌词
+          if (lrctxt && lrctxt !== '') {
+            if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
+            const lyricFile = `${singer} - ${songname}.lrc`;
+            const lyricPath = path.join(lyricsDir, lyricFile);
+            if (!fs.existsSync(lyricPath)) {
+              fs.writeFileSync(lyricPath, lrctxt, 'utf8');
+            } else {
+              console.log(`歌词已存在，跳过下载: ${lyricPath}`);
             }
-          // 如果没有歌曲URL，返回null
-          if (musicurl.length < 30) { // 当没有m4a音乐时，仅会返回"http://aqqmusic.tc.qq.com/"
-            console.log('没有找到歌曲URL');
-            reject(new Error('接口 2 返回非 200'));
-          }else{
-            console.log(`已找到歌曲URL: ${musicurl}`);
           }
-          result = {
-            title: songname,
-            artist: singer,
-            songUrl: musicurl,
-            lyricUrl: SERVER_URL + '/lyrics/' + singer + ' - ' + songname + '.lrc'
-          };
-          // 返回数据
-          resolve(result);
+
+          // 下载音乐
+          if (musicurl && musicurl.length > 30) {
+            if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir, { recursive: true });
+            const urlObj = new URL(musicurl);
+            const ext = path.extname(urlObj.pathname) || '.mp3';
+            const musicFile = `${singer} - ${songname}${ext}`;
+            const musicPath = path.join(musicDir, musicFile);
+
+            if (!fs.existsSync(musicPath)) {
+              // 下载文件
+              await new Promise((resolveDownload, rejectDownload) => {
+                const file = fs.createWriteStream(musicPath);
+                http.get(musicurl, response => {
+                  response.pipe(file);
+                  file.on('finish', () => file.close(resolveDownload));
+                }).on('error', err => {
+                  fs.unlinkSync(musicPath);
+                  rejectDownload(err);
+                });
+              });
+
+              // 写入元数据
+              const tags = {
+                title: songname,
+                artist: singer,
+                album: raw.data.album || '',
+                comment: 'Downloaded by MusicPlayerAPI'
+              };
+              nodeID3.write(tags, musicPath);
+            } else {
+              console.log(`歌曲已存在，跳过下载: ${musicPath}`);
+            }
+
+            resolve({
+              title: songname,
+              artist: singer,
+              songUrl: `${SERVER_URL}/music/${encodeURIComponent(musicFile)}`,
+              lyricUrl: `${SERVER_URL}/lyrics/${encodeURIComponent(`${singer} - ${songname}.lrc`)}`
+            });
+          } else {
+            reject(new Error('没有找到歌曲URL'));
+          }
         } catch (e) {
-          console.error('响应不是合法 JSON', e);
-          reject(new Error('接口 2 返回非 200'));
+          reject(new Error('响应不是合法 JSON'));
         }
       });
-    }).on('error', error => {
-      console.error(error);
-      reject(new Error('接口 2 返回非 200'));
-    });
-  } catch (error) {
-    console.error('NetEase Music API error:', error.message);
-    reject(new Error('接口 2 返回非 200'));
-  }
-});
+    }).on('error', error => reject(error));
+  });
 }
 
 // 本地文件搜索函数
@@ -410,7 +419,7 @@ app.get('/search', async (req, res) => {
     console.log(`Searching for: ${keyword}`);
 
     let result = null;
-    // 优先级搜索：网络接口1 -> 网络接口2 -> 本地文件
+    // 优先级搜索：在线播放 -> 下载音乐 -> 本地文件
     if (!searchEnabledNet1 && !searchEnabledNet2 && !searchEnabledLocal) {
       return res.status(503).json({
         error: 'All search methods are disabled',
@@ -420,20 +429,20 @@ app.get('/search', async (req, res) => {
     if (searchEnabledNet1)
     {
       try {
-      console.log('正在网络接口1搜索...');
+      console.log('正在在线播放...');
       result = await searchNet1Music(keyword);
       } catch (error) {
-        console.log('Net1 search failed, trying Migu...');
+        console.log('play music online failed, trying download...');
       }
     }
     if (searchEnabledNet2)
     {
       if (!result) {
         try {
-          console.log('正在网络接口2搜索...');
-          result = await searchMiguMusic(keyword);
+          console.log('正在下载音乐...');
+          result = await downloadMusic(keyword);
         } catch (error) {
-          console.log('Net2 search failed, trying Navidrome...');
+          console.log('download music failed, trying local...');
         }
       }
     }
