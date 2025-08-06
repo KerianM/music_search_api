@@ -1,0 +1,30 @@
+{
+  "name": "music-search-api",
+  "version": "1.0.0",
+  "description": "A Node.js music search API server with multiple music sources support",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "music",
+    "api",
+    "search",
+    "nodejs",
+    "express"
+  ],
+  "dependencies": {
+    "axios": "latest",
+    "cors": "latest",
+    "crypto": "^1.0.1",
+    "dotenv": "latest",
+    "express": "latest",
+    "fs": "^0.0.1-security",
+    "glob": "^11.0.3",
+    "music-metadata": "^7.14.0",
+    "path": "^0.12.7"
+  }
+}
