@@ -5,8 +5,9 @@
 ## 功能特性
 
 - 🎵 支持关键词搜索音乐
+- 👀 自动下载网络歌词
 - 🎶 基于音乐文件内置元数据搜索（title、artist、album）
-- 🔍 多音乐源集成（网易云音乐、咪咕音乐、本地文件）
+- 🔍 多音乐源集成（网络1、网络2、本地文件）
 - 📁 本地音乐文件搜索和播放
 - 📝 自动匹配歌词文件
 - 🎵 支持多种音频格式的元数据读取
@@ -37,6 +38,23 @@ cp .env.example .env
 node server.js
 ```
 
+## Docker部署
+
+### 拉取node环境
+```bash
+docker pull node:20-alpine
+```
+### 构建docker镜像
+```bash
+docker build -t music-search-api .
+```
+### docker镜像的导出、导入、重命名
+```bash
+docker save -o [镜像id] music_search_api.tar
+docker load < music_search_api.tar
+docker tag [镜像id] music-search-api:latest
+```
+
 ## API文档
 
 ### 搜索音乐
@@ -48,23 +66,20 @@ node server.js
 
 **示例请求：**
 ```
-GET http://localhost:3000/search?keyword=周杰伦晴天
+GET http://localhost:3015/search?keyword=周杰伦晴天
 ```
 
 **示例响应：**
 ```json
 {
-  "id": "FB2urKkWUgSUsm0uYHVN7t",
   "title": "晴天",
   "artist": "周杰伦",
-  "album": "叶惠美",
-  "duration": 269.5,
   "songUrl": "http://example.com/music/sunny-day.mp3",
   "lyricUrl": "http://example.com/lyrics/sunny-day.lrc"
 }
 ```
 
-### 流播放音乐
+### 流播放音乐（本地）
 
 **GET** `/stream`
 
@@ -81,7 +96,7 @@ GET http://localhost:3000/stream?id=FB2urKkWUgSUsm0uYHVN7t
 - 自动设置正确的Content-Type
 - 支持断点续传
 
-### 获取音乐信息
+### 获取音乐信息（本地）
 
 **GET** `/info`
 
@@ -106,58 +121,12 @@ GET http://localhost:3000/info?id=FB2urKkWUgSUsm0uYHVN7t
 }
 ```
 
-### 健康检查
+### 健康检查（本地）
 
 **GET** `/health`
 
 检查服务器状态。
 
-## 音乐源配置
-
-### 1. 网易云音乐
-
-需要申请官方API或使用合法的第三方接口。
-
-### 2. 咪咕音乐
-
-需要申请官方API密钥。
-
-### 3. 本地文件搜索
-
-创建音乐和歌词目录，并配置环境变量：
-```
-MUSIC_DIRECTORY=./music
-LYRICS_DIRECTORY=./lyrics
-```
-
-**元数据搜索：**
-- 自动读取MP3、FLAC等音频文件的内置元数据
-- 支持按标题(title)、艺术家(artist)、专辑(album)搜索
-- 如果元数据不可用，自动回退到文件名搜索
-- 返回完整的音乐信息包括专辑和时长
-
-**支持的音频格式：**
-- MP3, FLAC, WAV, AAC, M4A, OGG
-
-**歌词文件格式：**
-- LRC, TXT
-
-**文件命名建议：**
-- 音乐文件：`艺术家 - 歌曲名.mp3`
-- 歌词文件：`艺术家 - 歌曲名.lrc`
-
-**目录结构示例：**
-```
-music/
-├── 周杰伦 - 晴天.mp3
-├── 周杰伦 - 青花瓷.flac
-└── 邓紫棋 - 泡沫.mp3
-
-lyrics/
-├── 周杰伦 - 晴天.lrc
-├── 周杰伦 - 青花瓷.lrc
-└── 邓紫棋 - 泡沫.lrc
-```
 
 ## 重要说明
 
